@@ -27,7 +27,7 @@ extension CGVector {
 
 extension CGFloat {
     func clamped(_ minValue: CGFloat, _ maxValue: CGFloat) -> CGFloat {
-        min(max(self, minValue), maxValue)
+        Swift.min(Swift.max(self, minValue), maxValue)
     }
 }
 

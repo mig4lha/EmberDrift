@@ -2,8 +2,8 @@ import SpriteKit
 
 final class PlayerNode: SKNode {
     private let body: SKShapeNode
-    private(set) var maxHP: CGFloat
-    private(set) var hp: CGFloat
+    var maxHP: CGFloat
+    var hp: CGFloat
 
     private(set) var isInvulnerable: Bool = false
     private var invulnRemaining: TimeInterval = 0
