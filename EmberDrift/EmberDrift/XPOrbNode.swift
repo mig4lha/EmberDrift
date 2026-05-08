@@ -7,9 +7,15 @@ final class XPOrbNode: SKShapeNode {
         self.xpValue = xpValue
         super.init()
 
-        path = CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2), transform: nil)
-        fillColor = .systemYellow
-        strokeColor = .clear
+        if let tex = GameAssets.texture(GameAssets.ImageName.xpOrb) {
+            let sprite = SKSpriteNode(texture: tex)
+            sprite.size = CGSize(width: 16, height: 16)
+            addChild(sprite)
+        } else {
+            path = CGPath(ellipseIn: CGRect(x: -radius, y: -radius, width: radius * 2, height: radius * 2), transform: nil)
+            fillColor = .systemYellow
+            strokeColor = .clear
+        }
         zPosition = 9
 
         let body = SKPhysicsBody(circleOfRadius: radius)

@@ -4,6 +4,7 @@ final class MainMenuScene: SKScene {
     private let titleLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
     private let startLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
     private let hintLabel = SKLabelNode(fontNamed: "AvenirNext-Regular")
+    private let ashLabel = SKLabelNode(fontNamed: "AvenirNext-Regular")
 
     override func didMove(to view: SKView) {
         backgroundColor = .black
@@ -24,6 +25,12 @@ final class MainMenuScene: SKScene {
         hintLabel.alpha = 0.8
         hintLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.30)
         addChild(hintLabel)
+
+        ashLabel.text = "Ash: \(SaveStore.shared.ash)"
+        ashLabel.fontSize = 16
+        ashLabel.alpha = 0.9
+        ashLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.22)
+        addChild(ashLabel)
     }
 
     override func didChangeSize(_ oldSize: CGSize) {
@@ -31,6 +38,7 @@ final class MainMenuScene: SKScene {
         titleLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.72)
         startLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.50)
         hintLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.30)
+        ashLabel.position = CGPoint(x: size.width / 2, y: size.height * 0.22)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
