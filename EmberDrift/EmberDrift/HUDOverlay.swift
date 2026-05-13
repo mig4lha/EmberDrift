@@ -1,4 +1,5 @@
 import SpriteKit
+import UIKit
 
 final class HUDOverlay {
     enum NodeName {
@@ -95,19 +96,28 @@ final class HUDOverlay {
         cameraNode.addChild(pauseLabel)
     }
 
-    func layout(sceneSize: CGSize) {
-        hpLabel.position = CGPoint(x: -sceneSize.width * 0.5 + 16, y: sceneSize.height * 0.5 - 16)
-        statsLabel.position = CGPoint(x: -sceneSize.width * 0.5 + 16, y: sceneSize.height * 0.5 - 40)
-        xpLabel.position = CGPoint(x: -sceneSize.width * 0.5 + 16, y: sceneSize.height * 0.5 - 64)
-        timerLabel.position = CGPoint(x: sceneSize.width * 0.5 - 16, y: sceneSize.height * 0.5 - 16)
+    func layout(sceneSize: CGSize, safeAreaInsets: UIEdgeInsets = .zero) {
+        let halfW = sceneSize.width * 0.5
+        let halfH = sceneSize.height * 0.5
+        let s = safeAreaInsets
+        let marginTop = 16 + s.top
+        let marginLeft = 16 + s.left
+        let marginRight = 16 + s.right
 
-        bossLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.5 - 20)
-        bossBarBG.position = CGPoint(x: 0, y: sceneSize.height * 0.5 - 40)
+        let topY = halfH - marginTop
+
+        hpLabel.position = CGPoint(x: -halfW + marginLeft, y: topY)
+        statsLabel.position = CGPoint(x: -halfW + marginLeft, y: topY - 24)
+        xpLabel.position = CGPoint(x: -halfW + marginLeft, y: topY - 48)
+        timerLabel.position = CGPoint(x: halfW - marginRight, y: topY)
+
+        bossLabel.position = CGPoint(x: 0, y: topY - 4)
+        bossBarBG.position = CGPoint(x: 0, y: topY - 24)
         bossBarFill.position = bossBarBG.position
 
-        debugInvLabel.position = CGPoint(x: sceneSize.width * 0.5 - 16, y: sceneSize.height * 0.5 - 40)
-        debugLevelLabel.position = CGPoint(x: sceneSize.width * 0.5 - 16, y: sceneSize.height * 0.5 - 64)
-        pauseLabel.position = CGPoint(x: sceneSize.width * 0.5 - 16, y: sceneSize.height * 0.5 - 88)
+        debugInvLabel.position = CGPoint(x: halfW - marginRight, y: topY - 24)
+        debugLevelLabel.position = CGPoint(x: halfW - marginRight, y: topY - 48)
+        pauseLabel.position = CGPoint(x: halfW - marginRight, y: topY - 72)
     }
 
     func setInvincible(_ on: Bool) {

@@ -8,61 +8,168 @@ final class BossSystem {
     }
 
     private let world: SKNode
-    private weak var actionRunner: SKNode?
     private let physics: PhysicsMasks
 
     private(set) var boss: BossNode?
-    private var phase2: Bool = false
-    private var stompCooldownRemaining: TimeInterval = 0
 
-    init(world: SKNode, actionRunner: SKNode, physics: PhysicsMasks) {
+    /// Circle AOE around the boss (world units).
+    private let aoeRadius: CGFloat = 152
+    private let aoeWindup: TimeInterval = 1.35
+    private let aoeStrikeDuration: TimeInterval = 0.16
+    private let aoeCooldown: TimeInterval = 2.75
+    private let aoeDamage: CGFloat = 38
+    /// Chasing speed multiplier while the telegraph is winding up (readable tell).
+    private let telegraphMoveFactor: CGFloat = 0.28
+
+    private enum Phase {
+        case idle(remaining: TimeInterval)
+        case telegraph(elapsed: TimeInterval)
+        case striking(remaining: TimeInterval)
+    }
+
+    private var phase: Phase = .idle(remaining: 2.35)
+    private var telegraphShape: SKShapeNode?
+    private var strikeShape: SKShapeNode?
+
+    init(world: SKNode, physics: PhysicsMasks) {
         self.world = world
-        self.actionRunner = actionRunner
         self.physics = physics
     }
 
     func spawnBoss(sceneSize: CGSize, playerPosition: CGPoint) {
-        let node = BossNode(radius: 34, maxHP: 520, moveSpeed: 70, contactDamage: 16)
+        cleanupAttackVisuals()
+        let node = BossNode(radius: 34, maxHP: 520, moveSpeed: 70, contactDamage: 62)
         node.position = bossSpawnPoint(sceneSize: sceneSize, playerPosition: playerPosition)
         world.addChild(node)
         boss = node
-        phase2 = false
-        stompCooldownRemaining = 2.2
+        phase = .idle(remaining: 2.2)
     }
 
     func clearBoss() {
+        cleanupAttackVisuals()
         boss?.removeFromParent()
         boss = nil
-        phase2 = false
-        stompCooldownRemaining = 0
+        phase = .idle(remaining: 2.35)
     }
 
     func step(dt: TimeInterval, sceneSize: CGSize, playerPosition: CGPoint) {
-        guard dt > 0, let boss, boss.hp > 0 else { return }
-
-        if !phase2, boss.hp <= boss.maxHP * 0.5 {
-            phase2 = true
-            stompCooldownRemaining = 1.0
-
-            let flash = SKSpriteNode(color: SKColor(white: 1, alpha: 0.22), size: sceneSize)
-            flash.zPosition = 9999
-            world.addChild(flash)
-            flash.run(.sequence([.fadeOut(withDuration: 0.16), .removeFromParent()]))
-            boss.setScale(1.08)
-        }
-
-        if phase2 {
-            stompCooldownRemaining -= dt
-            if stompCooldownRemaining <= 0 {
-                stompCooldownRemaining = 4.0
-                performVoidStomp(from: boss, sceneSize: sceneSize)
-            }
+        guard dt > 0, let boss, boss.hp > 0 else {
+            cleanupAttackVisuals()
+            return
         }
 
         let toPlayer = CGVector(dx: playerPosition.x - boss.position.x, dy: playerPosition.y - boss.position.y)
         let dir = normalize(toPlayer)
-        boss.position.x += dir.dx * boss.moveSpeed * CGFloat(dt)
-        boss.position.y += dir.dy * boss.moveSpeed * CGFloat(dt)
+
+        var moveFactor: CGFloat = 1.0
+        switch phase {
+        case .idle(let remaining):
+            let next = remaining - dt
+            if next <= 0 {
+                beginTelegraph(on: boss)
+                phase = .telegraph(elapsed: 0)
+            } else {
+                phase = .idle(remaining: next)
+            }
+
+        case .telegraph(let elapsed):
+            moveFactor = telegraphMoveFactor
+            let nextElapsed = elapsed + dt
+            updateTelegraph(radiusFraction: CGFloat(min(1, nextElapsed / aoeWindup)))
+            if nextElapsed >= aoeWindup {
+                endTelegraph()
+                beginStrike(on: boss)
+                phase = .striking(remaining: aoeStrikeDuration)
+            } else {
+                phase = .telegraph(elapsed: nextElapsed)
+            }
+
+        case .striking(let remaining):
+            let next = remaining - dt
+            if next <= 0 {
+                endStrike()
+                phase = .idle(remaining: aoeCooldown)
+            } else {
+                phase = .striking(remaining: next)
+            }
+        }
+
+        let speed = boss.moveSpeed * moveFactor
+        boss.position.x += dir.dx * speed * CGFloat(dt)
+        boss.position.y += dir.dy * speed * CGFloat(dt)
+    }
+
+    private func beginTelegraph(on boss: BossNode) {
+        endTelegraph()
+        let r: CGFloat = 10
+        let shape = SKShapeNode(path: CGPath(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r), transform: nil))
+        shape.fillColor = SKColor(red: 1, green: 0.22, blue: 0.06, alpha: 0.14)
+        shape.strokeColor = SKColor(red: 1, green: 0.55, blue: 0.2, alpha: 0.5)
+        shape.lineWidth = 2.5
+        shape.zPosition = -3
+        shape.name = "boss_aoe_telegraph"
+        boss.addChild(shape)
+        telegraphShape = shape
+    }
+
+    private func updateTelegraph(radiusFraction: CGFloat) {
+        guard let shape = telegraphShape else { return }
+        let rMin: CGFloat = 10
+        let r = rMin + (aoeRadius - rMin) * radiusFraction
+        shape.path = CGPath(ellipseIn: CGRect(x: -r, y: -r, width: 2 * r, height: 2 * r), transform: nil)
+        let fillA = 0.12 + 0.28 * radiusFraction
+        shape.fillColor = SKColor(red: 1, green: 0.12 + 0.2 * radiusFraction, blue: 0.04, alpha: fillA)
+        shape.strokeColor = SKColor(red: 1, green: 0.45 + 0.35 * radiusFraction, blue: 0.12, alpha: 0.48 + 0.42 * radiusFraction)
+        shape.lineWidth = 2.5 + 3.5 * radiusFraction
+    }
+
+    private func endTelegraph() {
+        telegraphShape?.removeFromParent()
+        telegraphShape = nil
+    }
+
+    private func beginStrike(on boss: BossNode) {
+        endStrike()
+        let shape = SKShapeNode(path: CGPath(ellipseIn: CGRect(x: -aoeRadius, y: -aoeRadius, width: 2 * aoeRadius, height: 2 * aoeRadius), transform: nil))
+        shape.fillColor = SKColor(red: 1, green: 0.35, blue: 0.08, alpha: 0.22)
+        shape.strokeColor = SKColor(red: 1, green: 0.85, blue: 0.35, alpha: 0.95)
+        shape.lineWidth = 5
+        shape.zPosition = 4
+        shape.name = "boss_aoe_strike"
+
+        let body = SKPhysicsBody(circleOfRadius: aoeRadius)
+        body.affectedByGravity = false
+        body.allowsRotation = false
+        body.isDynamic = false
+        body.categoryBitMask = physics.bossAttack
+        body.collisionBitMask = physics.none
+        body.contactTestBitMask = physics.player
+        shape.physicsBody = body
+
+        let ud = NSMutableDictionary()
+        ud["bossAoeDmg"] = NSNumber(value: Double(aoeDamage))
+        shape.userData = ud
+
+        boss.addChild(shape)
+        strikeShape = shape
+
+        shape.run(
+            .sequence([
+                .wait(forDuration: aoeStrikeDuration * 0.45),
+                .fadeAlpha(to: 0.08, duration: aoeStrikeDuration * 0.55)
+            ])
+        )
+    }
+
+    private func endStrike() {
+        strikeShape?.removeAllActions()
+        strikeShape?.removeFromParent()
+        strikeShape = nil
+    }
+
+    private func cleanupAttackVisuals() {
+        endTelegraph()
+        endStrike()
     }
 
     private func bossSpawnPoint(sceneSize: CGSize, playerPosition: CGPoint) -> CGPoint {
@@ -78,75 +185,9 @@ final class BossSystem {
         }
     }
 
-    private func performVoidStomp(from boss: BossNode, sceneSize: CGSize) {
-        let tell = SKShapeNode(circleOfRadius: 46)
-        tell.position = boss.position
-        tell.fillColor = SKColor(white: 1, alpha: 0.08)
-        tell.strokeColor = SKColor(white: 1, alpha: 0.22)
-        tell.lineWidth = 2
-        tell.zPosition = 80
-        world.addChild(tell)
-        tell.run(.sequence([.scale(to: 1.25, duration: 0.25), .fadeOut(withDuration: 0.2), .removeFromParent()]))
-
-        actionRunner?.run(.sequence([.wait(forDuration: 0.5), .run { [weak self] in
-            self?.spawnStompShockwaves(at: boss.position, sceneSize: sceneSize)
-        }]))
-    }
-
-    private func spawnStompShockwaves(at origin: CGPoint, sceneSize: CGSize) {
-        let duration: TimeInterval = 0.6
-        let thickness: CGFloat = 26
-        let maxLen = max(sceneSize.width, sceneSize.height) * 1.2
-        let startLen: CGFloat = 40
-
-        func makeWave(rotation: CGFloat) -> SKShapeNode {
-            let node = SKShapeNode(rectOf: CGSize(width: startLen, height: thickness), cornerRadius: 6)
-            node.fillColor = SKColor(white: 1, alpha: 0.14)
-            node.strokeColor = SKColor(white: 1, alpha: 0.22)
-            node.lineWidth = 2
-            node.zRotation = rotation
-            node.position = origin
-            node.zPosition = 90
-            let body = SKPhysicsBody(rectangleOf: CGSize(width: startLen, height: thickness))
-            body.affectedByGravity = false
-            body.allowsRotation = false
-            body.isDynamic = false
-            body.categoryBitMask = physics.bossAttack
-            body.collisionBitMask = physics.none
-            body.contactTestBitMask = physics.player
-            node.physicsBody = body
-            return node
-        }
-
-        let h = makeWave(rotation: 0)
-        let v = makeWave(rotation: .pi / 2)
-        world.addChild(h)
-        world.addChild(v)
-
-        let expand = SKAction.customAction(withDuration: duration) { [physics] node, t in
-            let p = t / CGFloat(duration)
-            let w = startLen + (maxLen - startLen) * p
-            let rect = CGRect(x: -w / 2, y: -thickness / 2, width: w, height: thickness)
-            (node as? SKShapeNode)?.path = CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil)
-
-            let body = SKPhysicsBody(rectangleOf: CGSize(width: w, height: thickness))
-            body.affectedByGravity = false
-            body.allowsRotation = false
-            body.isDynamic = false
-            body.categoryBitMask = physics.bossAttack
-            body.collisionBitMask = physics.none
-            body.contactTestBitMask = physics.player
-            node.physicsBody = body
-        }
-
-        h.run(.sequence([expand, .removeFromParent()]))
-        v.run(.sequence([expand, .removeFromParent()]))
-    }
-
     private func normalize(_ v: CGVector) -> CGVector {
         let len = sqrt(v.dx * v.dx + v.dy * v.dy)
         guard len > 0.0001 else { return .zero }
         return CGVector(dx: v.dx / len, dy: v.dy / len)
     }
 }
-

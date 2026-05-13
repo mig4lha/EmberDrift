@@ -1,4 +1,5 @@
 import SpriteKit
+import UIKit
 
 final class LevelUpOverlay: SKNode {
     struct Choice {
@@ -13,7 +14,7 @@ final class LevelUpOverlay: SKNode {
     private var cardNodes: [SKNode] = []
     private var choices: [Choice] = []
 
-    func present(in parent: SKNode, sceneSize: CGSize, choices: [Choice]) {
+    func present(in parent: SKNode, sceneSize: CGSize, safeAreaInsets: UIEdgeInsets = .zero, choices: [Choice]) {
         removeFromParent()
         removeAllChildren()
         cardNodes.removeAll(keepingCapacity: true)
@@ -24,9 +25,11 @@ final class LevelUpOverlay: SKNode {
         dim.zPosition = 5000
         addChild(dim)
 
+        let topNudge = safeAreaInsets.top
+
         titleLabel.text = "LEVEL UP"
         titleLabel.fontSize = 28
-        titleLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.25)
+        titleLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.25 - topNudge)
         titleLabel.zPosition = 5001
         addChild(titleLabel)
 

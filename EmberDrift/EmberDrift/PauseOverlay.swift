@@ -1,4 +1,5 @@
 import SpriteKit
+import UIKit
 
 final class PauseOverlay: SKNode {
     enum Action {
@@ -15,7 +16,7 @@ final class PauseOverlay: SKNode {
     private let powerupsCrop = SKCropNode()
     private let powerupsMask = SKSpriteNode(color: .white, size: .zero)
 
-    func present(in parent: SKNode, sceneSize: CGSize, powerupsTaken: [String]) {
+    func present(in parent: SKNode, sceneSize: CGSize, safeAreaInsets: UIEdgeInsets = .zero, powerupsTaken: [String]) {
         removeFromParent()
         removeAllChildren()
         powerupsCrop.removeAllChildren()
@@ -26,9 +27,11 @@ final class PauseOverlay: SKNode {
         dim.zPosition = 6000
         addChild(dim)
 
+        let topNudge = safeAreaInsets.top
+
         titleLabel.text = "PAUSED"
         titleLabel.fontSize = 32
-        titleLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.25)
+        titleLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.25 - topNudge)
         titleLabel.zPosition = 6001
         addChild(titleLabel)
 

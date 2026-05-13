@@ -1,4 +1,5 @@
 import SpriteKit
+import UIKit
 
 final class RunScene: SKScene, SKPhysicsContactDelegate {
     enum Physics {
@@ -16,6 +17,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     // Map tiling (3x3)
     private let tileSize = CGSize(width: 512, height: 512)
     private var tiles: [SKSpriteNode] = []
+    /// Half-width/height of the tile grid in cells (total tiles per axis = `2 * tileGridRadius + 1`).
+    private var tileGridRadius: Int = -1
 
     // Player
     private let player = SKSpriteNode(color: .clear, size: CGSize(width: 44, height: 44))
@@ -113,23 +116,48 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
         bossSystem = BossSystem(
             world: world,
-            actionRunner: self,
             physics: .init(bossAttack: Physics.bossAttack, player: Physics.player, none: Physics.none)
         )
 
-        setupTiles()
+        rebuildGroundTilesIfNeeded()
+        recycleTilesAroundPlayer()
         setupPlayer()
         // spawn is continuous now
         hud.attach(to: cameraNode)
-        hud.layout(sceneSize: size)
+        layoutHUDForSafeArea()
+        DispatchQueue.main.async { [weak self] in self?.layoutHUDForSafeArea() }
         updateHUD()
     }
 
-    private func setupTiles() {
-        tiles.removeAll(keepingCapacity: true)
+    private func viewSafeAreaInsets() -> UIEdgeInsets {
+        view?.safeAreaInsets ?? .zero
+    }
 
-        for gy in -1...1 {
-            for gx in -1...1 {
+    private func layoutHUDForSafeArea() {
+        hud.layout(sceneSize: size, safeAreaInsets: viewSafeAreaInsets())
+    }
+
+    /// Enough tiles so the camera frustum (including diagonal) stays covered with margin; avoids black borders.
+    private func neededTileGridRadius() -> Int {
+        let w = min(tileSize.width, tileSize.height)
+        guard w > 1 else { return 3 }
+        let halfW = size.width * 0.5
+        let halfH = size.height * 0.5
+        let halfDiagonal = hypot(halfW, halfH)
+        let coverDistance = halfDiagonal + w
+        let r = Int(ceil(coverDistance / w)) + 1
+        return max(2, r)
+    }
+
+    private func rebuildGroundTilesIfNeeded() {
+        let r = neededTileGridRadius()
+        guard r != tileGridRadius else { return }
+        for t in tiles { t.removeFromParent() }
+        tiles.removeAll(keepingCapacity: true)
+        tileGridRadius = r
+
+        for gy in -r...r {
+            for gx in -r...r {
                 let tile: SKSpriteNode
                 if let tex = GameAssets.texture(GameAssets.ImageName.tileGround) {
                     tile = SKSpriteNode(texture: tex, size: tileSize)
@@ -139,8 +167,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
                         size: tileSize
                     )
                 }
+                tile.anchorPoint = CGPoint(x: 0.5, y: 0.5)
                 tile.zPosition = -100
-                tile.position = CGPoint(x: CGFloat(gx) * tileSize.width, y: CGFloat(gy) * tileSize.height)
                 world.addChild(tile)
                 tiles.append(tile)
             }
@@ -176,7 +204,9 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
-        hud.layout(sceneSize: size)
+        layoutHUDForSafeArea()
+        rebuildGroundTilesIfNeeded()
+        recycleTilesAroundPlayer()
     }
 
     // MARK: - Touch movement (Week 1)
@@ -205,7 +235,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         if camHits.contains(where: { $0.name == HUDOverlay.NodeName.pause }) {
             isPausedByPlayer = true
             pauseOverlay.position = .zero
-            pauseOverlay.present(in: cameraNode, sceneSize: size, powerupsTaken: formattedPowerUpCounts())
+            pauseOverlay.present(in: cameraNode, sceneSize: size, safeAreaInsets: viewSafeAreaInsets(), powerupsTaken: formattedPowerUpCounts())
             return
         }
 
@@ -264,15 +294,18 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         }
         lastUpdateTime = currentTime
 
-        elapsed = min(runLengthSeconds, elapsed + TimeInterval(dt))
+        let simulating = !isLevelUpPresented && !isPausedByPlayer
+        if simulating {
+            elapsed = min(runLengthSeconds, elapsed + TimeInterval(dt))
 
-        if !didVoidSurge, elapsed >= runLengthSeconds {
-            didVoidSurge = true
-            performVoidSurge()
-            bossSystem.spawnBoss(sceneSize: size, playerPosition: player.position)
+            if !didVoidSurge, elapsed >= runLengthSeconds {
+                didVoidSurge = true
+                performVoidSurge()
+                bossSystem.spawnBoss(sceneSize: size, playerPosition: player.position)
+            }
         }
 
-        if !isLevelUpPresented, !isPausedByPlayer {
+        if simulating {
             stepPlayer(dt: dt)
             spawner.step(
                 dt: dt,
@@ -396,15 +429,21 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func recycleTilesAroundPlayer() {
-        let baseX = floor(player.position.x / tileSize.width) * tileSize.width
-        let baseY = floor(player.position.y / tileSize.height) * tileSize.height
+        rebuildGroundTilesIfNeeded()
+        guard !tiles.isEmpty, tileGridRadius >= 0 else { return }
+
+        let w = tileSize.width
+        let h = tileSize.height
+        let centerX = floor(player.position.x / w) * w + w * 0.5
+        let centerY = floor(player.position.y / h) * h + h * 0.5
+        let r = tileGridRadius
 
         var idx = 0
-        for gy in -1...1 {
-            for gx in -1...1 {
+        for gy in -r...r {
+            for gx in -r...r {
                 tiles[idx].position = CGPoint(
-                    x: baseX + CGFloat(gx) * tileSize.width,
-                    y: baseY + CGFloat(gy) * tileSize.height
+                    x: centerX + CGFloat(gx) * w,
+                    y: centerY + CGFloat(gy) * h
                 )
                 idx += 1
             }
@@ -449,7 +488,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         if (a == Physics.player && b == Physics.boss) || (a == Physics.boss && b == Physics.player) {
             guard !isInvincible else { return }
             let now = lastUpdateTime ?? 0
-            let cooldown: TimeInterval = 0.35
+            let cooldown: TimeInterval = 0.5
             guard now - lastDamageTime >= cooldown else { return }
             lastDamageTime = now
 
@@ -470,7 +509,14 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             guard now - lastDamageTime >= cooldown else { return }
             lastDamageTime = now
 
-            applyIncomingDamage(22)
+            let attackNode = (a == Physics.bossAttack ? contact.bodyA.node : contact.bodyB.node)
+            let dmg: CGFloat = {
+                if let n = attackNode?.userData?["bossAoeDmg"] as? NSNumber {
+                    return CGFloat(truncating: n)
+                }
+                return 22
+            }()
+            applyIncomingDamage(dmg)
             updateHUD()
             if hp <= 0 {
                 endRun()
@@ -541,7 +587,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         }
 
         levelUpOverlay.position = .zero
-        levelUpOverlay.present(in: cameraNode, sceneSize: size, choices: choices)
+        levelUpOverlay.present(in: cameraNode, sceneSize: size, safeAreaInsets: viewSafeAreaInsets(), choices: choices)
     }
 
     private func applyPowerUp(_ id: String) {
