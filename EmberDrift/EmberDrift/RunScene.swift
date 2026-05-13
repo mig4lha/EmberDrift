@@ -37,8 +37,19 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private let bruteSpeed: CGFloat = 85
     private let bruteHP: CGFloat = 70
     private let bruteContactDamage: CGFloat = 12
-
-    private var spawnAccumulator: CGFloat = 0
+    private lazy var spawner = EnemySpawner(
+        world: world,
+        tuning: .init(
+            scuttlerRadius: scuttlerRadius,
+            scuttlerSpeed: scuttlerSpeed,
+            scuttlerHP: scuttlerHP,
+            scuttlerContactDamage: scuttlerContactDamage,
+            bruteRadius: bruteRadius,
+            bruteSpeed: bruteSpeed,
+            bruteHP: bruteHP,
+            bruteContactDamage: bruteContactDamage
+        )
+    )
 
     // Run timer
     private var elapsed: TimeInterval = 0
@@ -46,11 +57,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private var didVoidSurge: Bool = false
 
     // Auto-attack (Ember Ring)
-    private var attackCooldownRemaining: TimeInterval = 0
-    private var attackInterval: TimeInterval = 1.2
-    private var attackRadius: CGFloat = 120
-    private let baseAttackDamage: CGFloat = 8
-    private var damageMultiplier: CGFloat = 1.0
+    private lazy var combat = CombatSystem(tuning: .init(baseAttackDamage: 8, burnDuration: 3.0))
     private var kills: Int = 0
 
     // Defensive modifiers
@@ -67,44 +74,25 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private var ashMultiplier: Double = 1.0
     private var nextLevelCardCountOverride: Int?
 
-    // Afterburn + eruption
-    private var burnDps: CGFloat = 0.0
-    private let burnDuration: TimeInterval = 3.0
-    private var eruptionChance: Double = 0.0
+    // Afterburn + eruption (stored in `combat`)
 
     // XP + leveling
-    private var level: Int = 1
-    private var xp: Int = 0
-    private var pendingLevelUps: Int = 0
+    private let xpSystem = XPSystem()
     private var isLevelUpPresented: Bool = false
     private let levelUpOverlay = LevelUpOverlay()
-    private var xpOrbs: [XPOrbNode] = []
-    private let baseOrbPullRadius: CGFloat = 90
-    private var orbPullRadiusMultiplier: CGFloat = 1.0
 
     // Power-ups (GDD)
     private var powerUpStacks: [PowerUpKind: Int] = [:]
 
     // HUD
-    private let hpLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let statsLabel = SKLabelNode(fontNamed: "AvenirNext-Regular")
-    private let xpLabel = SKLabelNode(fontNamed: "AvenirNext-Regular")
-    private let timerLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
-    private let bossBarBG = SKShapeNode(rectOf: CGSize(width: 220, height: 12), cornerRadius: 6)
-    private let bossBarFill = SKShapeNode(rectOf: CGSize(width: 216, height: 8), cornerRadius: 4)
-    private let bossLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-    private let debugInvLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-    private let debugLevelLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-    private let pauseLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let hud = HUDOverlay()
     private var hp: CGFloat = 100
     private var lastDamageTime: TimeInterval = -999
 
     private var lastUpdateTime: TimeInterval?
 
     // Boss
-    private var boss: BossNode?
-    private var bossPhase2: Bool = false
-    private var stompCooldownRemaining: TimeInterval = 0
+    private var bossSystem: BossSystem!
 
     // Run state + debug
     private var isRunning: Bool = true
@@ -123,10 +111,17 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         camera = cameraNode
         addChild(cameraNode)
 
+        bossSystem = BossSystem(
+            world: world,
+            actionRunner: self,
+            physics: .init(bossAttack: Physics.bossAttack, player: Physics.player, none: Physics.none)
+        )
+
         setupTiles()
         setupPlayer()
         // spawn is continuous now
-        setupHUD()
+        hud.attach(to: cameraNode)
+        hud.layout(sceneSize: size)
         updateHUD()
     }
 
@@ -179,101 +174,9 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         hp = maxHP
     }
 
-    private func setupHUD() {
-        hpLabel.fontSize = 18
-        hpLabel.horizontalAlignmentMode = .left
-        hpLabel.verticalAlignmentMode = .top
-        hpLabel.zPosition = 10_000
-        cameraNode.addChild(hpLabel)
-
-        statsLabel.fontSize = 14
-        statsLabel.horizontalAlignmentMode = .left
-        statsLabel.verticalAlignmentMode = .top
-        statsLabel.alpha = 0.85
-        statsLabel.zPosition = 10_000
-        cameraNode.addChild(statsLabel)
-
-        xpLabel.fontSize = 14
-        xpLabel.horizontalAlignmentMode = .left
-        xpLabel.verticalAlignmentMode = .top
-        xpLabel.alpha = 0.85
-        xpLabel.zPosition = 10_000
-        cameraNode.addChild(xpLabel)
-
-        timerLabel.fontSize = 18
-        timerLabel.horizontalAlignmentMode = .right
-        timerLabel.verticalAlignmentMode = .top
-        timerLabel.zPosition = 10_000
-        cameraNode.addChild(timerLabel)
-
-        bossLabel.text = "VOID COLOSSUS"
-        bossLabel.fontSize = 14
-        bossLabel.alpha = 0.9
-        bossLabel.isHidden = true
-        bossLabel.zPosition = 10_000
-        cameraNode.addChild(bossLabel)
-
-        bossBarBG.fillColor = SKColor(white: 0.1, alpha: 0.85)
-        bossBarBG.strokeColor = SKColor(white: 1, alpha: 0.15)
-        bossBarBG.lineWidth = 2
-        bossBarBG.isHidden = true
-        bossBarBG.zPosition = 10_000
-        cameraNode.addChild(bossBarBG)
-
-        bossBarFill.fillColor = .systemRed
-        bossBarFill.strokeColor = .clear
-        bossBarFill.isHidden = true
-        bossBarFill.zPosition = 10_001
-        cameraNode.addChild(bossBarFill)
-
-        debugInvLabel.text = "INV: OFF"
-        debugInvLabel.fontSize = 14
-        debugInvLabel.alpha = 0.85
-        debugInvLabel.name = "debug_inv"
-        debugInvLabel.horizontalAlignmentMode = .right
-        debugInvLabel.verticalAlignmentMode = .top
-        debugInvLabel.zPosition = 10_000
-        cameraNode.addChild(debugInvLabel)
-
-        debugLevelLabel.text = "+LVL"
-        debugLevelLabel.fontSize = 14
-        debugLevelLabel.alpha = 0.85
-        debugLevelLabel.name = "debug_lvl"
-        debugLevelLabel.horizontalAlignmentMode = .right
-        debugLevelLabel.verticalAlignmentMode = .top
-        debugLevelLabel.zPosition = 10_000
-        cameraNode.addChild(debugLevelLabel)
-
-        pauseLabel.text = "PAUSE"
-        pauseLabel.fontSize = 14
-        pauseLabel.alpha = 0.9
-        pauseLabel.name = "hud_pause"
-        pauseLabel.horizontalAlignmentMode = .right
-        pauseLabel.verticalAlignmentMode = .top
-        pauseLabel.zPosition = 10_000
-        cameraNode.addChild(pauseLabel)
-
-        layoutHUD()
-    }
-
     override func didChangeSize(_ oldSize: CGSize) {
         super.didChangeSize(oldSize)
-        layoutHUD()
-    }
-
-    private func layoutHUD() {
-        hpLabel.position = CGPoint(x: -size.width * 0.5 + 16, y: size.height * 0.5 - 16)
-        statsLabel.position = CGPoint(x: -size.width * 0.5 + 16, y: size.height * 0.5 - 40)
-        xpLabel.position = CGPoint(x: -size.width * 0.5 + 16, y: size.height * 0.5 - 64)
-        timerLabel.position = CGPoint(x: size.width * 0.5 - 16, y: size.height * 0.5 - 16)
-
-        bossLabel.position = CGPoint(x: 0, y: size.height * 0.5 - 20)
-        bossBarBG.position = CGPoint(x: 0, y: size.height * 0.5 - 40)
-        bossBarFill.position = bossBarBG.position
-
-        debugInvLabel.position = CGPoint(x: size.width * 0.5 - 16, y: size.height * 0.5 - 40)
-        debugLevelLabel.position = CGPoint(x: size.width * 0.5 - 16, y: size.height * 0.5 - 64)
-        pauseLabel.position = CGPoint(x: size.width * 0.5 - 16, y: size.height * 0.5 - 88)
+        hud.layout(sceneSize: size)
     }
 
     // MARK: - Touch movement (Week 1)
@@ -299,21 +202,21 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
-        if camHits.contains(where: { $0.name == "hud_pause" }) {
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.pause }) {
             isPausedByPlayer = true
             pauseOverlay.position = .zero
             pauseOverlay.present(in: cameraNode, sceneSize: size, powerupsTaken: formattedPowerUpCounts())
             return
         }
 
-        if camHits.contains(where: { $0.name == "debug_inv" }) {
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugInvincible }) {
             isInvincible.toggle()
-            debugInvLabel.text = isInvincible ? "INV: ON" : "INV: OFF"
+            hud.setInvincible(isInvincible)
             return
         }
-        if camHits.contains(where: { $0.name == "debug_lvl" }) {
-            level += 1
-            pendingLevelUps += 1
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugLevelUp }) {
+            xpSystem.setLevelForDebug(xpSystem.snapshot().level + 1)
+            xpSystem.addPendingLevelUps(1)
             updateHUD()
             return
         }
@@ -366,25 +269,32 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         if !didVoidSurge, elapsed >= runLengthSeconds {
             didVoidSurge = true
             performVoidSurge()
-            spawnBoss()
+            bossSystem.spawnBoss(sceneSize: size, playerPosition: player.position)
         }
 
         if !isLevelUpPresented, !isPausedByPlayer {
             stepPlayer(dt: dt)
-            spawnEnemies(dt: dt)
+            spawner.step(
+                dt: dt,
+                elapsed: elapsed,
+                bossExists: bossSystem.boss != nil,
+                sceneSize: size,
+                playerPosition: player.position,
+                enemies: &enemies
+            )
             stepEnemies(dt: dt)
             stepCombat(dt: TimeInterval(dt))
-            stepBoss(dt: TimeInterval(dt))
+            bossSystem.step(dt: TimeInterval(dt), sceneSize: size, playerPosition: player.position)
             stepRegenAndShield(dt: TimeInterval(dt))
             stepEnemyDots(dt: TimeInterval(dt))
-            stepOrbMagnet(dt: TimeInterval(dt))
+            xpSystem.stepOrbMagnet(dt: TimeInterval(dt), playerPosition: player.position)
         } else {
             cameraNode.position = player.position
         }
         cameraNode.position = player.position
         recycleTilesAroundPlayer()
 
-        if pendingLevelUps > 0, !isLevelUpPresented {
+        if xpSystem.snapshot().pendingLevelUps > 0, !isLevelUpPresented {
             presentLevelUp()
         }
 
@@ -405,17 +315,9 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func stepEnemyDots(dt: TimeInterval) {
-        // Placeholder DoT ticks; implemented by attaching values to userData.
-        guard dt > 0, burnDps > 0 else { return }
-        for enemy in enemies where !enemy.isHidden {
-            guard let ud = enemy.userData else { continue }
-            let remaining = (ud["burnRemaining"] as? Double) ?? 0
-            if remaining <= 0 { continue }
-            let newRemaining = max(0, remaining - dt)
-            ud["burnRemaining"] = newRemaining
-            enemy.hp = max(0, enemy.hp - burnDps * CGFloat(dt))
-            if enemy.hp <= 0 {
-                onEnemyKilled(enemy)
+        if let result = combat.stepDots(dt: dt, enemies: enemies) {
+            for e in result.killedEnemies {
+                onEnemyKilled(e)
             }
         }
     }
@@ -443,28 +345,15 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         let xpValue = (enemy.kind == .scuttler) ? 4 : 10
         spawnXPOrb(at: enemy.position, value: xpValue)
 
-        // Eruption: chance to deal AoE on kill
-        if eruptionChance > 0, Double.random(in: 0...1) < eruptionChance {
-            let radius: CGFloat = 95
-            let dmg = baseAttackDamage * damageMultiplier * 1.2
-            let r2 = radius * radius
-            for other in enemies where !other.isHidden {
-                let dx = other.position.x - enemy.position.x
-                let dy = other.position.y - enemy.position.y
-                if (dx * dx + dy * dy) <= r2 {
-                    other.hp = max(0, other.hp - dmg)
-                    if other.hp <= 0 {
-                        // avoid recursion explosion; mark and clean later
-                        other.isHidden = true
-                        other.removeFromParent()
-                        kills += 1
-                        if other.kind == .scuttler { scuttlerKills += 1 } else { bruteKills += 1 }
-                        let xp2 = (other.kind == .scuttler) ? 4 : 10
-                        spawnXPOrb(at: other.position, value: xp2)
-                    }
-                }
+        combat.tryEruptionFromKill(
+            origin: enemy.position,
+            enemies: &enemies,
+            spawnXPOrb: { [weak self] pos, xp in self?.spawnXPOrb(at: pos, value: xp) },
+            onKillCounted: { [weak self] other in
+                self?.kills += 1
+                if other.kind == .scuttler { self?.scuttlerKills += 1 } else { self?.bruteKills += 1 }
             }
-        }
+        )
 
         enemy.isHidden = true
         enemy.removeFromParent()
@@ -472,141 +361,19 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         updateHUD()
     }
 
-    private func spawnEnemies(dt: CGFloat) {
-        guard dt > 0 else { return }
-        // Stop spawns at 4:45 per GDD (void surge prep)
-        let spawningEnabled = elapsed < 285
-        guard spawningEnabled else { return }
-        guard boss == nil else { return }
-
-        spawnAccumulator += spawnRate(elapsedSeconds: elapsed) * dt
-        while spawnAccumulator >= 1 {
-            spawnAccumulator -= 1
-            spawnOneEnemy()
-        }
-    }
-
-    private func spawnOneEnemy() {
-        // Brutes are introduced at 1:00.
-        let hasBrutes = elapsed >= 60
-        let shouldSpawnBrute = hasBrutes && Double.random(in: 0...1) < 0.22
-        if shouldSpawnBrute {
-            spawnBrute()
-        } else {
-            spawnScuttler()
-        }
-    }
-
-    private func spawnScuttler() {
-        let enemy = EnemyNode(
-            kind: .scuttler,
-            radius: scuttlerRadius,
-            maxHP: scuttlerHP,
-            moveSpeed: scuttlerSpeed,
-            contactDamage: scuttlerContactDamage
-        )
-        enemy.position = spawnPointOutsideCamera()
-        world.addChild(enemy)
-        enemies.append(enemy)
-    }
-
-    private func spawnBrute() {
-        let enemy = EnemyNode(
-            kind: .brute,
-            radius: bruteRadius,
-            maxHP: bruteHP,
-            moveSpeed: bruteSpeed,
-            contactDamage: bruteContactDamage
-        )
-        enemy.position = spawnPointOutsideCamera()
-        world.addChild(enemy)
-        enemies.append(enemy)
-    }
-
-    private func spawnRate(elapsedSeconds t: TimeInterval) -> CGFloat {
-        // Continuous curve approximating the design table.
-        // 0:00 2/s → 1:00 4/s → 2:00 7/s → 3:00 11/s → 4:00 16/s
-        func lerp(_ a: CGFloat, _ b: CGFloat, _ x: CGFloat) -> CGFloat { a + (b - a) * x }
-        func segment(_ t0: TimeInterval, _ t1: TimeInterval, _ r0: CGFloat, _ r1: CGFloat, _ t: TimeInterval) -> CGFloat {
-            let x = CGFloat((t - t0) / max(0.0001, (t1 - t0)))
-            return lerp(r0, r1, max(0, min(1, x)))
-        }
-
-        if t < 60 { return segment(0, 60, 2, 4, t) }
-        if t < 120 { return segment(60, 120, 4, 7, t) }
-        if t < 180 { return segment(120, 180, 7, 11, t) }
-        if t < 240 { return segment(180, 240, 11, 16, t) }
-        return 16
-    }
-
-    private func spawnPointOutsideCamera() -> CGPoint {
-        // Spawn just outside visible area around the camera/player.
-        let halfW = size.width * 0.5
-        let halfH = size.height * 0.5
-        let margin: CGFloat = 40
-
-        let side = Int.random(in: 0..<4)
-        switch side {
-        case 0: // left
-            return CGPoint(x: player.position.x - halfW - margin, y: player.position.y + CGFloat.random(in: -halfH...halfH))
-        case 1: // right
-            return CGPoint(x: player.position.x + halfW + margin, y: player.position.y + CGFloat.random(in: -halfH...halfH))
-        case 2: // bottom
-            return CGPoint(x: player.position.x + CGFloat.random(in: -halfW...halfW), y: player.position.y - halfH - margin)
-        default: // top
-            return CGPoint(x: player.position.x + CGFloat.random(in: -halfW...halfW), y: player.position.y + halfH + margin)
-        }
-    }
-
     private func stepCombat(dt: TimeInterval) {
-        guard dt > 0 else { return }
-        attackCooldownRemaining -= dt
-        guard attackCooldownRemaining <= 0 else { return }
-        attackCooldownRemaining = attackInterval
-
-        // Visual ring
-        let ring = SKShapeNode(circleOfRadius: attackRadius)
-        ring.position = player.position
-        ring.strokeColor = SKColor(white: 1, alpha: 0.65)
-        ring.lineWidth = 3
-        ring.fillColor = .clear
-        ring.zPosition = 100
-        world.addChild(ring)
-        ring.run(.sequence([.fadeOut(withDuration: 0.18), .removeFromParent()]))
-
-        // Damage all enemies in radius
-        let radiusSq = attackRadius * attackRadius
-        for enemy in enemies where !enemy.isHidden {
-            let dx = enemy.position.x - player.position.x
-            let dy = enemy.position.y - player.position.y
-            if (dx * dx + dy * dy) <= radiusSq {
-                let dmg = baseAttackDamage * damageMultiplier
-                enemy.hp = max(0, enemy.hp - dmg)
-
-                // Afterburn: apply burn DoT
-                if burnDps > 0 {
-                    if enemy.userData == nil { enemy.userData = NSMutableDictionary() }
-                    enemy.userData?["burnRemaining"] = burnDuration
-                }
-                if enemy.hp <= 0 {
-                    onEnemyKilled(enemy)
-                }
+        if let result = combat.stepRing(
+            dt: dt,
+            world: world,
+            playerPosition: player.position,
+            enemies: &enemies,
+            boss: bossSystem.boss
+        ) {
+            for e in result.killedEnemies {
+                onEnemyKilled(e)
             }
-        }
-
-        // Keep list small
-        enemies.removeAll(where: { $0.parent == nil || $0.isHidden })
-
-        // Boss takes damage from Ember Ring too.
-        if let boss, boss.hp > 0 {
-            let dx = boss.position.x - player.position.x
-            let dy = boss.position.y - player.position.y
-            if (dx * dx + dy * dy) <= radiusSq {
-                let dmg = baseAttackDamage * damageMultiplier
-                boss.hp = max(0, boss.hp - dmg)
-                if boss.hp <= 0 {
-                    onBossKilled()
-                }
+            if result.bossKilled {
+                onBossKilled()
             }
         }
         updateHUD()
@@ -620,128 +387,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
         for e in enemies { e.removeFromParent() }
         enemies.removeAll(keepingCapacity: true)
-
-        // Optional cleanup: remove orbs during surge (keeps boss arena clean).
-        for orb in xpOrbs { orb.removeFromParent() }
-        xpOrbs.removeAll(keepingCapacity: true)
-    }
-
-    private func spawnBoss() {
-        let node = BossNode(radius: 34, maxHP: 520, moveSpeed: 70, contactDamage: 16)
-        node.position = bossSpawnPoint()
-        world.addChild(node)
-        boss = node
-        bossPhase2 = false
-        stompCooldownRemaining = 2.2
-        bossLabel.isHidden = false
-        bossBarBG.isHidden = false
-        bossBarFill.isHidden = false
-        updateHUD()
-    }
-
-    private func bossSpawnPoint() -> CGPoint {
-        let halfW = size.width * 0.5
-        let halfH = size.height * 0.5
-        let margin: CGFloat = 30
-        let side = Int.random(in: 0..<4)
-        switch side {
-        case 0: return CGPoint(x: player.position.x - halfW - margin, y: player.position.y)
-        case 1: return CGPoint(x: player.position.x + halfW + margin, y: player.position.y)
-        case 2: return CGPoint(x: player.position.x, y: player.position.y - halfH - margin)
-        default: return CGPoint(x: player.position.x, y: player.position.y + halfH + margin)
-        }
-    }
-
-    private func stepBoss(dt: TimeInterval) {
-        guard dt > 0, let boss, boss.hp > 0 else { return }
-
-        if !bossPhase2, boss.hp <= boss.maxHP * 0.5 {
-            bossPhase2 = true
-            let flash = SKSpriteNode(color: SKColor(white: 1, alpha: 0.22), size: size)
-            flash.zPosition = 9999
-            cameraNode.addChild(flash)
-            flash.run(.sequence([.fadeOut(withDuration: 0.16), .removeFromParent()]))
-            boss.setScale(1.08)
-            stompCooldownRemaining = 1.0
-        }
-
-        if bossPhase2 {
-            stompCooldownRemaining -= dt
-            if stompCooldownRemaining <= 0 {
-                stompCooldownRemaining = 4.0
-                performVoidStomp(from: boss)
-            }
-        }
-
-        let toPlayer = CGVector(dx: player.position.x - boss.position.x, dy: player.position.y - boss.position.y)
-        let dir = normalize(toPlayer)
-        boss.position.x += dir.dx * boss.moveSpeed * CGFloat(dt)
-        boss.position.y += dir.dy * boss.moveSpeed * CGFloat(dt)
-    }
-
-    private func performVoidStomp(from boss: BossNode) {
-        let tell = SKShapeNode(circleOfRadius: 46)
-        tell.position = boss.position
-        tell.fillColor = SKColor(white: 1, alpha: 0.08)
-        tell.strokeColor = SKColor(white: 1, alpha: 0.22)
-        tell.lineWidth = 2
-        tell.zPosition = 80
-        world.addChild(tell)
-        tell.run(.sequence([.scale(to: 1.25, duration: 0.25), .fadeOut(withDuration: 0.2), .removeFromParent()]))
-
-        run(.sequence([.wait(forDuration: 0.5), .run { [weak self] in
-            self?.spawnStompShockwaves(at: boss.position)
-        }]))
-    }
-
-    private func spawnStompShockwaves(at origin: CGPoint) {
-        let duration: TimeInterval = 0.6
-        let thickness: CGFloat = 26
-        let maxLen = max(size.width, size.height) * 1.2
-        let startLen: CGFloat = 40
-
-        func makeWave(rotation: CGFloat) -> SKShapeNode {
-            let node = SKShapeNode(rectOf: CGSize(width: startLen, height: thickness), cornerRadius: 6)
-            node.fillColor = SKColor(white: 1, alpha: 0.14)
-            node.strokeColor = SKColor(white: 1, alpha: 0.22)
-            node.lineWidth = 2
-            node.zRotation = rotation
-            node.position = origin
-            node.zPosition = 90
-            let body = SKPhysicsBody(rectangleOf: CGSize(width: startLen, height: thickness))
-            body.affectedByGravity = false
-            body.allowsRotation = false
-            body.isDynamic = false
-            body.categoryBitMask = Physics.bossAttack
-            body.collisionBitMask = Physics.none
-            body.contactTestBitMask = Physics.player
-            node.physicsBody = body
-            return node
-        }
-
-        let h = makeWave(rotation: 0)
-        let v = makeWave(rotation: .pi / 2)
-        world.addChild(h)
-        world.addChild(v)
-
-        let expand = SKAction.customAction(withDuration: duration) { node, t in
-            let p = t / CGFloat(duration)
-            let w = startLen + (maxLen - startLen) * p
-            let rect = CGRect(x: -w / 2, y: -thickness / 2, width: w, height: thickness)
-            (node as? SKShapeNode)?.path = CGPath(roundedRect: rect, cornerWidth: 6, cornerHeight: 6, transform: nil)
-
-            let body = SKPhysicsBody(rectangleOf: CGSize(width: w, height: thickness))
-            body.affectedByGravity = false
-            body.allowsRotation = false
-            body.isDynamic = false
-            body.categoryBitMask = Physics.bossAttack
-            body.collisionBitMask = Physics.none
-            body.contactTestBitMask = Physics.player
-            node.physicsBody = body
-        }
-
-        h.run(.sequence([expand, .removeFromParent()]))
-        v.run(.sequence([expand, .removeFromParent()]))
+        xpSystem.clearOrbs()
     }
 
     private func onBossKilled() {
@@ -792,9 +438,10 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         if (a == Physics.player && b == Physics.xpOrb) || (a == Physics.xpOrb && b == Physics.player) {
             let orbNode = (a == Physics.xpOrb ? contact.bodyA.node : contact.bodyB.node)
             if let orb = orbNode as? XPOrbNode {
-                collectXP(orb.xpValue)
+                xpSystem.addXP(orb.xpValue)
                 orb.removeFromParent()
-                xpOrbs.removeAll(where: { $0 === orb })
+                xpSystem.onOrbCollected(orb)
+                updateHUD()
             }
             return
         }
@@ -833,18 +480,18 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func updateHUD() {
-        hpLabel.text = "HP: \(Int(hp))/\(Int(maxHP))"
-        statsLabel.text = "Kills: \(kills)   Enemies: \(enemies.count)"
-        xpLabel.text = "Level: \(level)   XP: \(xp)/\(xpNeededForNextLevel())"
-        timerLabel.text = formatMMSS(seconds: Int(elapsed))
-
-        if let boss {
-            let pct = max(0, min(1, boss.hp / max(1, boss.maxHP)))
-            bossBarFill.xScale = pct
-            bossBarFill.isHidden = false
-            bossBarBG.isHidden = false
-            bossLabel.isHidden = false
-        }
+        let xpSnap = xpSystem.snapshot()
+        hud.update(
+            hp: hp,
+            maxHP: maxHP,
+            kills: kills,
+            enemiesCount: enemies.count,
+            level: xpSnap.level,
+            xp: xpSnap.xp,
+            xpToNext: xpSnap.xpToNext,
+            timerText: formatMMSS(seconds: Int(elapsed)),
+            boss: bossSystem.boss
+        )
     }
 
     private func applyIncomingDamage(_ rawDamage: CGFloat) {
@@ -872,59 +519,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func spawnXPOrb(at pos: CGPoint, value: Int) {
-        let orb = XPOrbNode(xpValue: value)
-        orb.position = pos
-        world.addChild(orb)
-        xpOrbs.append(orb)
-    }
-
-    private func collectXP(_ amount: Int) {
-        xp += amount
-        while xp >= xpNeededForNextLevel() {
-            xp -= xpNeededForNextLevel()
-            level += 1
-            pendingLevelUps += 1
-        }
-        updateHUD()
-    }
-
-    private func stepOrbMagnet(dt: TimeInterval) {
-        guard dt > 0 else { return }
-        let pullRadius = baseOrbPullRadius * orbPullRadiusMultiplier
-        let pullRadiusSq = pullRadius * pullRadius
-        let pullSpeed: CGFloat = 520 // world units/sec; tuned feel
-
-        // prune collected/deleted orbs
-        xpOrbs.removeAll(where: { $0.parent == nil })
-
-        for orb in xpOrbs {
-            let dx = player.position.x - orb.position.x
-            let dy = player.position.y - orb.position.y
-            let distSq = dx * dx + dy * dy
-            guard distSq <= pullRadiusSq, distSq > 0.0001 else { continue }
-            let dist = sqrt(distSq)
-            let step = min(dist, pullSpeed * CGFloat(dt))
-            orb.position.x += (dx / dist) * step
-            orb.position.y += (dy / dist) * step
-        }
-    }
-
-    private func xpNeededForNextLevel() -> Int {
-        // Front-loaded curve (MVP baseline)
-        switch level {
-        case 1: return 20
-        case 2: return 35
-        case 3: return 55
-        case 4: return 80
-        case 5: return 110
-        case 6: return 145
-        case 7: return 185
-        case 8: return 230
-        case 9: return 280
-        default:
-            // small ramp beyond 10
-            return 280 + (level - 9) * 60
-        }
+        xpSystem.spawnOrb(in: world, at: pos, value: value)
     }
 
     private func presentLevelUp() {
@@ -936,7 +531,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         let options = drawPowerUpOptions(count: count)
         if options.isEmpty || (options.count == 1 && options.first == .kindlingBurst) {
             applyOverflowReward()
-            pendingLevelUps = max(0, pendingLevelUps - 1)
+            xpSystem.consumeOnePendingLevelUp()
             isLevelUpPresented = false
             return
         }
@@ -956,7 +551,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         // dismiss overlay
         levelUpOverlay.removeFromParent()
         isLevelUpPresented = false
-        pendingLevelUps = max(0, pendingLevelUps - 1)
+        xpSystem.consumeOnePendingLevelUp()
         updateHUD()
     }
 
@@ -993,7 +588,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
     private func apply(_ kind: PowerUpKind) {
         if kind == .kindlingBurst {
-            pendingLevelUps += 1
+            xpSystem.addPendingLevelUps(1)
             return
         }
         if kind == .overload {
@@ -1013,17 +608,17 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
         switch kind {
         case .scorch:
-            damageMultiplier *= 1.2
+            combat.damageMultiplier *= 1.2
         case .afterburn:
-            burnDps = CGFloat(newStacks) * 5.0
+            combat.burnDps = CGFloat(newStacks) * 5.0
         case .twinFlame:
-            damageMultiplier *= 1.35
+            combat.damageMultiplier *= 1.35
         case .eruption:
-            eruptionChance = (newStacks >= 2) ? 0.50 : 0.25
+            combat.eruptionChance = (newStacks >= 2) ? 0.50 : 0.25
         case .widerReach:
-            attackRadius *= 1.3
+            combat.attackRadius *= 1.3
         case .rapidCycle:
-            attackInterval *= 0.75
+            combat.attackInterval *= 0.75
         case .emberShell:
             hasShield = true
             shieldRegenRemaining = 0
@@ -1040,7 +635,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             moveSpeedMultiplier *= 1.2
         case .magneticPull:
             // 1st stack: x2, 2nd stack: x3
-            orbPullRadiusMultiplier = (newStacks >= 2) ? 3.0 : 2.0
+            xpSystem.setMagnetStacks(newStacks)
         case .kindlingBurst, .ashTithe, .overload:
             break
         }
@@ -1055,7 +650,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         // Pool exhaustion reward
         maxHP += 15
         hp = min(maxHP, hp + 15)
-        damageMultiplier *= 1.10
+        combat.damageMultiplier *= 1.10
 
         let note = SKLabelNode(fontNamed: "AvenirNext-Bold")
         note.text = "MAX BUILD"
@@ -1098,7 +693,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             kills: kills,
             killsScuttler: scuttlerKills,
             killsBrute: bruteKills,
-            finalLevel: level,
+            finalLevel: xpSystem.snapshot().level,
             ashEarned: ashEarned,
             bossKilled: bossKilled,
             powerUpCounts: powerUpStacks.reduce(into: [:]) { partialResult, kv in
