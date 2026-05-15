@@ -28,6 +28,8 @@
 		6B0000012F0000000000000E /* EnemySpawner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000022F0000000000000E /* EnemySpawner.swift */; };
 		6B0000012F0000000000000F /* CombatSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000022F0000000000000F /* CombatSystem.swift */; };
 		6B0000012F00000000000010 /* BossSystem.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000022F00000000000010 /* BossSystem.swift */; };
+		6B0000012F00000000000011 /* DamageFlash.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000022F00000000000011 /* DamageFlash.swift */; };
+		6B0000012F00000000000012 /* BossProjectileNode.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6B0000022F00000000000012 /* BossProjectileNode.swift */; };
 		13255AAE2FA2279F0042E2A5 /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 13255AAC2FA2279F0042E2A5 /* Main.storyboard */; };
 		13255AB02FA227A00042E2A5 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13255AAF2FA227A00042E2A5 /* Assets.xcassets */; };
 		13255AB32FA227A00042E2A5 /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 13255AB12FA227A00042E2A5 /* LaunchScreen.storyboard */; };
@@ -56,6 +58,8 @@
 		6B0000022F0000000000000E /* EnemySpawner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EnemySpawner.swift; sourceTree = "<group>"; };
 		6B0000022F0000000000000F /* CombatSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CombatSystem.swift; sourceTree = "<group>"; };
 		6B0000022F00000000000010 /* BossSystem.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BossSystem.swift; sourceTree = "<group>"; };
+		6B0000022F00000000000011 /* DamageFlash.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DamageFlash.swift; sourceTree = "<group>"; };
+		6B0000022F00000000000012 /* BossProjectileNode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BossProjectileNode.swift; sourceTree = "<group>"; };
 		13255AAD2FA2279F0042E2A5 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		13255AAF2FA227A00042E2A5 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		13255AB22FA227A00042E2A5 /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -111,6 +115,8 @@
 				6B0000022F0000000000000E /* EnemySpawner.swift */,
 				6B0000022F0000000000000F /* CombatSystem.swift */,
 				6B0000022F00000000000010 /* BossSystem.swift */,
+				6B0000022F00000000000011 /* DamageFlash.swift */,
+				6B0000022F00000000000012 /* BossProjectileNode.swift */,
 				13255AAA2FA2279F0042E2A5 /* GameViewController.swift */,
 				13255AAC2FA2279F0042E2A5 /* Main.storyboard */,
 				13255AAF2FA227A00042E2A5 /* Assets.xcassets */,
@@ -211,6 +217,8 @@
 				6B0000012F0000000000000E /* EnemySpawner.swift in Sources */,
 				6B0000012F0000000000000F /* CombatSystem.swift in Sources */,
 				6B0000012F00000000000010 /* BossSystem.swift in Sources */,
+				6B0000012F00000000000011 /* DamageFlash.swift in Sources */,
+				6B0000012F00000000000012 /* BossProjectileNode.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

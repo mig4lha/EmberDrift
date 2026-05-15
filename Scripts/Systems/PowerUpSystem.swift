@@ -13,12 +13,10 @@ final class PowerUpSystem {
         allowedKinds = kinds
     }
 
-    // Remaining draw pool is derived from caps and picked uniques.
     func drawOptions(count: Int) -> [PowerUpKind] {
         var pool = availablePool()
         if pool.isEmpty { return [] }
 
-        // Kindling burst only when other power-ups remain.
         if pool.count == 1, pool.first == .kindlingBurst {
             return []
         }
@@ -40,26 +38,21 @@ final class PowerUpSystem {
         let stacks = state.stacks[kind] ?? 0
         switch kind {
         case .scorch:
-            modifiers.damageMultiplier *= (stacks == 1 ? 1.2 : 1.2)
+            modifiers.damageMultiplier *= 1.12
         case .afterburn:
-            modifiers.dotDamagePerSecond = CGFloat(stacks) * 5
+            modifiers.dotDamagePerSecond = CGFloat(stacks) * 3
         case .twinFlame:
-            modifiers.damageMultiplier *= 1.25
+            modifiers.damageMultiplier *= 1.28
         case .eruption:
-            // proc chance handled later; placeholder benefit.
-            modifiers.damageMultiplier *= (stacks == 1 ? 1.05 : 1.1)
+            modifiers.damageMultiplier *= (stacks == 1 ? 1.02 : 1.04)
         case .widerReach:
-            modifiers.attackRadius *= 1.3
+            modifiers.attackRadius *= 1.12
         case .rapidCycle:
-            modifiers.attackInterval *= 0.75
+            modifiers.attackInterval *= 0.88
+        case .emberBolt:
+            break
         case .emberShell:
-            // Shield handled later (week 3+); placeholder no-op now.
             break
-        case .smoldering:
-            // Regen handled later; placeholder no-op.
-            break
-        case .ashenHide:
-            modifiers.damageReduction = min(0.30, modifiers.damageReduction + 0.15)
         case .heatSink:
             modifiers.maxHPBonus += 30
             player.maxHP += 30
@@ -70,6 +63,8 @@ final class PowerUpSystem {
             modifiers.moveSpeedMultiplier *= 1.2
         case .magneticPull:
             modifiers.magneticPullRange = (stacks == 1) ? 180 : 260
+        case .glowingCoals:
+            break
         case .kindlingBurst:
             break
         case .ashTithe:
@@ -84,7 +79,6 @@ final class PowerUpSystem {
     }
 
     private func availablePool() -> [PowerUpKind] {
-        // Build a pool excluding kindlingBurst first; we add it only if other picks exist.
         var kinds = PowerUpKind.allCases
             .filter { allowedKinds.contains($0) }
             .filter { $0 != .kindlingBurst }
@@ -96,7 +90,6 @@ final class PowerUpSystem {
             return false
         }
 
-        // Kindling burst only appears when at least one other power-up remains.
         if !kinds.isEmpty {
             if allowedKinds.contains(.kindlingBurst) {
                 kinds.append(.kindlingBurst)
@@ -114,17 +107,16 @@ final class PowerUpSystem {
         case .eruption: return 2
         case .widerReach: return 2
         case .rapidCycle: return 3
+        case .emberBolt: return 3
         case .emberShell: return 1
-        case .smoldering: return 2
-        case .ashenHide: return 2
         case .heatSink: return 3
         case .rekindle: return 1
         case .draft: return 3
         case .magneticPull: return 2
+        case .glowingCoals: return 3
         case .kindlingBurst: return nil
         case .ashTithe: return 1
         case .overload: return 1
         }
     }
 }
-

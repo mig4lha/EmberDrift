@@ -8,17 +8,17 @@ enum PowerUpKind: String, CaseIterable, Hashable {
     case eruption
     case widerReach
     case rapidCycle
+    case emberBolt
 
     // Defensive
     case emberShell
-    case smoldering
-    case ashenHide
     case heatSink
     case rekindle
 
     // Utility
     case draft
     case magneticPull
+    case glowingCoals
     case kindlingBurst
     case ashTithe
     case overload
@@ -31,13 +31,13 @@ enum PowerUpKind: String, CaseIterable, Hashable {
         case .eruption: return 2
         case .widerReach: return 2
         case .rapidCycle: return 3
+        case .emberBolt: return 3
         case .emberShell: return 1
-        case .smoldering: return 2
-        case .ashenHide: return 2
         case .heatSink: return 3
         case .rekindle: return 1
         case .draft: return 3
         case .magneticPull: return 2
+        case .glowingCoals: return 3
         case .kindlingBurst: return nil
         case .ashTithe: return 1
         case .overload: return 1
@@ -61,13 +61,13 @@ enum PowerUpKind: String, CaseIterable, Hashable {
         case .eruption: return "ERUPTION"
         case .widerReach: return "WIDER REACH"
         case .rapidCycle: return "RAPID CYCLE"
+        case .emberBolt: return "EMBER BOLT"
         case .emberShell: return "EMBER SHELL"
-        case .smoldering: return "SMOLDERING"
-        case .ashenHide: return "ASHEN HIDE"
         case .heatSink: return "HEAT SINK"
         case .rekindle: return "REKINDLE"
         case .draft: return "DRAFT"
         case .magneticPull: return "MAGNETIC PULL"
+        case .glowingCoals: return "GLOWING COALS"
         case .kindlingBurst: return "KINDLING BURST"
         case .ashTithe: return "ASH TITHE"
         case .overload: return "OVERLOAD"
@@ -76,23 +76,22 @@ enum PowerUpKind: String, CaseIterable, Hashable {
 
     var subtitle: String {
         switch self {
-        case .scorch: return "+20% damage (stackable)"
+        case .scorch: return "+12% damage (stackable)"
         case .afterburn: return "Burn enemies for 3s (stackable)"
-        case .twinFlame: return "Unique damage boost"
+        case .twinFlame: return "+28% damage (unique)"
         case .eruption: return "Kills may erupt (stackable)"
-        case .widerReach: return "+30% attack radius (stackable)"
+        case .widerReach: return "+12% ring radius (stackable)"
         case .rapidCycle: return "Attack faster (stackable)"
+        case .emberBolt: return "Bolt volley: 2/4/8 shots (stackable)"
         case .emberShell: return "One-hit shield, regen 15s"
-        case .smoldering: return "Regenerate HP (stackable)"
-        case .ashenHide: return "Damage reduction (stackable)"
         case .heatSink: return "+30 max HP (stackable)"
         case .rekindle: return "Revive once at 40% HP"
         case .draft: return "+20% move speed (stackable)"
         case .magneticPull: return "Pull XP orbs from farther"
+        case .glowingCoals: return "+8% XP earned (stackable)"
         case .kindlingBurst: return "Immediately gain another pick"
         case .ashTithe: return "+50% Ash this run"
         case .overload: return "Next pick shows 4 cards"
         }
     }
 }
-

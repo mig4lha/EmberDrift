@@ -215,7 +215,7 @@ final class GameScene: SKScene {
         }
 
         if save.emberTree.volatileStart {
-            let offensive: [PowerUpKind] = [.scorch, .afterburn, .twinFlame, .eruption, .widerReach, .rapidCycle]
+            let offensive: [PowerUpKind] = [.scorch, .afterburn, .twinFlame, .eruption, .widerReach, .rapidCycle, .emberBolt]
             if let kind = offensive.randomElement() {
                 powerUps.apply(kind, modifiers: &modifiers, player: player)
             }
@@ -295,19 +295,19 @@ final class GameScene: SKScene {
 
     private func subtitle(for kind: PowerUpKind) -> String {
         switch kind {
-        case .scorch: return "+20% damage (stackable)"
+        case .scorch: return "+12% damage (stackable)"
         case .afterburn: return "Adds burn damage over time"
-        case .twinFlame: return "Unique damage boost"
-        case .eruption: return "Kill proc becomes stronger later"
-        case .widerReach: return "+30% attack radius (stackable)"
+        case .twinFlame: return "+28% damage (unique)"
+        case .eruption: return "Kills may erupt (stackable)"
+        case .widerReach: return "+12% ring radius (stackable)"
         case .rapidCycle: return "Faster attack cycle (stackable)"
-        case .emberShell: return "One-hit shield (later)"
-        case .smoldering: return "Regeneration (later)"
-        case .ashenHide: return "Damage reduction (stackable)"
+        case .emberBolt: return "Bolt volley: 2/4/8 shots (stackable)"
+        case .emberShell: return "One-hit shield, regen 15s"
         case .heatSink: return "+30 max HP (stackable)"
-        case .rekindle: return "Revive once (later)"
+        case .rekindle: return "Revive once at 40% HP"
         case .draft: return "+20% move speed (stackable)"
         case .magneticPull: return "Pull XP orbs from farther away"
+        case .glowingCoals: return "+8% XP earned (stackable)"
         case .kindlingBurst: return "Immediately gain another level-up"
         case .ashTithe: return "+50% Ash this run"
         case .overload: return "Next level-up shows 4 cards"

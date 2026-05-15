@@ -51,8 +51,14 @@ final class EnemyNode: SKNode {
         let body = SKPhysicsBody(circleOfRadius: radius)
         body.affectedByGravity = false
         body.allowsRotation = false
+        body.isDynamic = true
+        body.linearDamping = 0
+        body.friction = 0
+        body.restitution = 0
+        body.mass = (kind == .brute) ? 1.8 : 1.0
+        body.usesPreciseCollisionDetection = true
         body.categoryBitMask = RunScene.Physics.enemy
-        body.collisionBitMask = RunScene.Physics.none
+        body.collisionBitMask = RunScene.Physics.enemy | RunScene.Physics.boss
         body.contactTestBitMask = RunScene.Physics.player
         physicsBody = body
     }
@@ -66,6 +72,19 @@ final class EnemyNode: SKNode {
         self.contactDamage = contactDamage
         isHidden = false
         alpha = 1
+        physicsBody?.velocity = .zero
+        physicsBody?.isDynamic = true
+        childNode(withName: "damageFlashOverlay")?.removeFromParent()
+    }
+
+    /// Applies damage, plays hit flash, returns whether HP reached zero.
+    @discardableResult
+    func applyDamage(_ amount: CGFloat) -> Bool {
+        guard amount > 0, !isHidden else { return false }
+        hp = max(0, hp - amount)
+        let flashRadius = sprite.parent != nil ? radius * 1.35 : radius * 1.15
+        showDamageFlash(radius: flashRadius)
+        return hp <= 0
     }
 }
 

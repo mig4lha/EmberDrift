@@ -32,12 +32,12 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private var scuttlerKills: Int = 0
     private var bruteKills: Int = 0
     private let scuttlerRadius: CGFloat = 16
-    private let scuttlerSpeed: CGFloat = 140
+    private let scuttlerSpeed: CGFloat = 112
     private let scuttlerHP: CGFloat = 16
     private let scuttlerContactDamage: CGFloat = 4
 
     private let bruteRadius: CGFloat = 22
-    private let bruteSpeed: CGFloat = 85
+    private let bruteSpeed: CGFloat = 68
     private let bruteHP: CGFloat = 70
     private let bruteContactDamage: CGFloat = 12
     private lazy var spawner = EnemySpawner(
@@ -60,12 +60,9 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private var didVoidSurge: Bool = false
 
     // Auto-attack (Ember Ring)
-    private lazy var combat = CombatSystem(tuning: .init(baseAttackDamage: 8, burnDuration: 3.0))
+    private lazy var combat = CombatSystem(tuning: .init(baseAttackDamage: 10, burnDuration: 3.0))
     private var kills: Int = 0
 
-    // Defensive modifiers
-    private var damageReduction: CGFloat = 0.0 // 0...0.30
-    private var regenPerSecond: CGFloat = 0.0
     private var maxHP: CGFloat = 100
 
     // Shield + revive
@@ -83,6 +80,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     private let xpSystem = XPSystem()
     private var isLevelUpPresented: Bool = false
     private let levelUpOverlay = LevelUpOverlay()
+    private var levelUpHoldTouch: UITouch?
 
     // Power-ups (GDD)
     private var powerUpStacks: [PowerUpKind: Int] = [:]
@@ -223,6 +221,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
                 case .resume:
                     pauseOverlay.removeFromParent()
                     isPausedByPlayer = false
+                    refreshGameplayFreeze()
                 case .mainMenu:
                     pauseOverlay.removeFromParent()
                     isPausedByPlayer = false
@@ -234,6 +233,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
         if camHits.contains(where: { $0.name == HUDOverlay.NodeName.pause }) {
             isPausedByPlayer = true
+            refreshGameplayFreeze()
             pauseOverlay.position = .zero
             pauseOverlay.present(in: cameraNode, sceneSize: size, safeAreaInsets: viewSafeAreaInsets(), powerupsTaken: formattedPowerUpCounts())
             return
@@ -252,8 +252,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         }
         if isLevelUpPresented {
             let loc = touch.location(in: levelUpOverlay)
-            if let choice = levelUpOverlay.pick(at: loc) {
-                applyPowerUp(choice.id)
+            if levelUpOverlay.beginHold(at: loc) {
+                levelUpHoldTouch = touch
             }
             return
         }
@@ -261,17 +261,37 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
+        if isLevelUpPresented, let holdTouch = levelUpHoldTouch, touches.contains(holdTouch) {
+            let loc = holdTouch.location(in: levelUpOverlay)
+            if !levelUpOverlay.isFingerOnHeldCard(at: loc) {
+                levelUpOverlay.cancelHold()
+                levelUpHoldTouch = nil
+            }
+            return
+        }
         guard !isLevelUpPresented else { return }
         updateMoveVector(touches)
     }
 
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard !isLevelUpPresented else { return }
+        if isLevelUpPresented {
+            if let holdTouch = levelUpHoldTouch, touches.contains(holdTouch) {
+                levelUpOverlay.cancelHold()
+                levelUpHoldTouch = nil
+            }
+            return
+        }
         moveVector = .zero
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        guard !isLevelUpPresented else { return }
+        if isLevelUpPresented {
+            if let holdTouch = levelUpHoldTouch, touches.contains(holdTouch) {
+                levelUpOverlay.cancelHold()
+                levelUpHoldTouch = nil
+            }
+            return
+        }
         moveVector = .zero
     }
 
@@ -293,6 +313,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             dt = 0
         }
         lastUpdateTime = currentTime
+
+        refreshGameplayFreeze()
 
         let simulating = !isLevelUpPresented && !isPausedByPlayer
         if simulating {
@@ -318,7 +340,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             stepEnemies(dt: dt)
             stepCombat(dt: TimeInterval(dt))
             bossSystem.step(dt: TimeInterval(dt), sceneSize: size, playerPosition: player.position)
-            stepRegenAndShield(dt: TimeInterval(dt))
+            stepShieldRegen(dt: TimeInterval(dt))
             stepEnemyDots(dt: TimeInterval(dt))
             xpSystem.stepOrbMagnet(dt: TimeInterval(dt), playerPosition: player.position)
         } else {
@@ -331,14 +353,19 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             presentLevelUp()
         }
 
+        if isLevelUpPresented, levelUpOverlay.isHolding, let holdTouch = levelUpHoldTouch {
+            let loc = holdTouch.location(in: levelUpOverlay)
+            if let choice = levelUpOverlay.advanceHold(at: loc, dt: TimeInterval(dt)) {
+                levelUpHoldTouch = nil
+                applyPowerUp(choice.id)
+            }
+        }
+
         updateHUD()
     }
 
-    private func stepRegenAndShield(dt: TimeInterval) {
+    private func stepShieldRegen(dt: TimeInterval) {
         guard dt > 0 else { return }
-        if regenPerSecond > 0, hp > 0 {
-            hp = min(maxHP, hp + regenPerSecond * CGFloat(dt))
-        }
         if !hasShield {
             shieldRegenRemaining = max(0, shieldRegenRemaining - dt)
             if shieldRegenRemaining <= 0, powerUpStacks[.emberShell, default: 0] > 0 {
@@ -367,8 +394,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         for enemy in enemies where !enemy.isHidden {
             let toPlayer = CGVector(dx: player.position.x - enemy.position.x, dy: player.position.y - enemy.position.y)
             let dir = normalize(toPlayer)
-            enemy.position.x += dir.dx * enemy.moveSpeed * dt
-            enemy.position.y += dir.dy * enemy.moveSpeed * dt
+            enemy.physicsBody?.velocity = CGVector(dx: dir.dx * enemy.moveSpeed, dy: dir.dy * enemy.moveSpeed)
         }
     }
 
@@ -388,6 +414,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             }
         )
 
+        enemy.physicsBody?.velocity = .zero
         enemy.isHidden = true
         enemy.removeFromParent()
         enemies.removeAll(where: { $0.parent == nil || $0.isHidden })
@@ -407,8 +434,26 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             }
             if result.bossKilled {
                 onBossKilled()
+                return
             }
         }
+
+        if let bolt = combat.stepBolt(
+            dt: dt,
+            world: world,
+            playerPosition: player.position,
+            enemies: &enemies,
+            boss: bossSystem.boss
+        ) {
+            for e in bolt.killedEnemies {
+                onEnemyKilled(e)
+            }
+            if bolt.bossKilled {
+                onBossKilled()
+                return
+            }
+        }
+
         updateHUD()
     }
 
@@ -517,6 +562,10 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
                 return 22
             }()
             applyIncomingDamage(dmg)
+            if attackNode?.name == "boss_projectile" || (attackNode?.userData?["isBossProjectile"] as? Bool) == true {
+                attackNode?.removeAllActions()
+                attackNode?.removeFromParent()
+            }
             updateHUD()
             if hp <= 0 {
                 endRun()
@@ -540,6 +589,11 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         )
     }
 
+    private func playPlayerDamageFlash() {
+        let radius: CGFloat = player.texture != nil ? 30 : 20
+        player.showDamageFlash(radius: radius)
+    }
+
     private func applyIncomingDamage(_ rawDamage: CGFloat) {
         guard rawDamage > 0 else { return }
 
@@ -549,8 +603,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
-        let reduced = rawDamage * (1 - damageReduction)
-        hp = max(0, hp - reduced)
+        hp = max(0, hp - rawDamage)
+        playPlayerDamageFlash()
 
         if hp <= 0, hasRekindle {
             hasRekindle = false
@@ -568,8 +622,32 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         xpSystem.spawnOrb(in: world, at: pos, value: value)
     }
 
+    private func refreshGameplayFreeze() {
+        let frozen = isLevelUpPresented || isPausedByPlayer
+        if frozen {
+            physicsWorld.speed = 0
+            moveVector = .zero
+            zeroActivePhysicsVelocities()
+        } else if physicsWorld.speed == 0 {
+            physicsWorld.speed = 1
+        }
+    }
+
+    private func zeroActivePhysicsVelocities() {
+        for enemy in enemies where !enemy.isHidden {
+            enemy.physicsBody?.velocity = .zero
+        }
+        bossSystem.boss?.physicsBody?.velocity = .zero
+        for child in world.children where child.name == "boss_projectile" {
+            child.physicsBody?.velocity = .zero
+        }
+    }
+
     private func presentLevelUp() {
         isLevelUpPresented = true
+        levelUpHoldTouch = nil
+        levelUpOverlay.cancelHold()
+        refreshGameplayFreeze()
 
         let count = nextLevelCardCountOverride ?? 3
         nextLevelCardCountOverride = nil
@@ -579,6 +657,7 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             applyOverflowReward()
             xpSystem.consumeOnePendingLevelUp()
             isLevelUpPresented = false
+            refreshGameplayFreeze()
             return
         }
 
@@ -592,11 +671,14 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
     private func applyPowerUp(_ id: String) {
         guard let p = PowerUpKind(rawValue: id) else { return }
+        levelUpOverlay.cancelHold()
+        levelUpHoldTouch = nil
         apply(p)
 
         // dismiss overlay
         levelUpOverlay.removeFromParent()
         isLevelUpPresented = false
+        refreshGameplayFreeze()
         xpSystem.consumeOnePendingLevelUp()
         updateHUD()
     }
@@ -654,24 +736,23 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
 
         switch kind {
         case .scorch:
-            combat.damageMultiplier *= 1.2
+            combat.damageMultiplier *= 1.12
         case .afterburn:
-            combat.burnDps = CGFloat(newStacks) * 5.0
+            combat.burnDps = CGFloat(newStacks) * 3.0
         case .twinFlame:
-            combat.damageMultiplier *= 1.35
+            combat.damageMultiplier *= 1.28
         case .eruption:
-            combat.eruptionChance = (newStacks >= 2) ? 0.50 : 0.25
+            combat.eruptionChance = (newStacks >= 2) ? 0.30 : 0.18
+            combat.eruptionRadius = (newStacks >= 2) ? 80 : 72
         case .widerReach:
-            combat.attackRadius *= 1.3
+            combat.attackRadius *= 1.12
         case .rapidCycle:
-            combat.attackInterval *= 0.75
+            combat.attackInterval *= 0.88
+        case .emberBolt:
+            combat.setBoltStacks(newStacks)
         case .emberShell:
             hasShield = true
             shieldRegenRemaining = 0
-        case .smoldering:
-            regenPerSecond = (newStacks >= 2) ? 10 : 5
-        case .ashenHide:
-            damageReduction = min(0.30, CGFloat(newStacks) * 0.15)
         case .heatSink:
             maxHP += 30
             hp = min(maxHP, hp + 30)
@@ -680,8 +761,9 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         case .draft:
             moveSpeedMultiplier *= 1.2
         case .magneticPull:
-            // 1st stack: x2, 2nd stack: x3
             xpSystem.setMagnetStacks(newStacks)
+        case .glowingCoals:
+            xpSystem.setXpEarnedStacks(newStacks)
         case .kindlingBurst, .ashTithe, .overload:
             break
         }

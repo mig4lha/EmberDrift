@@ -13,13 +13,16 @@ final class BossSystem {
     private(set) var boss: BossNode?
 
     /// Circle AOE around the boss (world units).
-    private let aoeRadius: CGFloat = 152
-    private let aoeWindup: TimeInterval = 1.35
-    private let aoeStrikeDuration: TimeInterval = 0.16
-    private let aoeCooldown: TimeInterval = 2.75
+    private let aoeRadius: CGFloat = 232
+    private let aoeWindup: TimeInterval = 0.92
+    private let aoeStrikeDuration: TimeInterval = 0.14
+    private let aoeCooldown: TimeInterval = 2.25
     private let aoeDamage: CGFloat = 38
-    /// Chasing speed multiplier while the telegraph is winding up (readable tell).
-    private let telegraphMoveFactor: CGFloat = 0.28
+    private let telegraphMoveFactor: CGFloat = 0.38
+
+    private let projectileSpeed: CGFloat = 295
+    private let projectileDamage: CGFloat = 34
+    private var projectileCooldownRemaining: TimeInterval = 3.0
 
     private enum Phase {
         case idle(remaining: TimeInterval)
@@ -27,7 +30,7 @@ final class BossSystem {
         case striking(remaining: TimeInterval)
     }
 
-    private var phase: Phase = .idle(remaining: 2.35)
+    private var phase: Phase = .idle(remaining: 1.85)
     private var telegraphShape: SKShapeNode?
     private var strikeShape: SKShapeNode?
 
@@ -38,23 +41,28 @@ final class BossSystem {
 
     func spawnBoss(sceneSize: CGSize, playerPosition: CGPoint) {
         cleanupAttackVisuals()
-        let node = BossNode(radius: 34, maxHP: 520, moveSpeed: 70, contactDamage: 62)
+        cleanupProjectiles()
+        let node = BossNode(radius: 34, maxHP: 3600, moveSpeed: 70, contactDamage: 62)
         node.position = bossSpawnPoint(sceneSize: sceneSize, playerPosition: playerPosition)
         world.addChild(node)
         boss = node
-        phase = .idle(remaining: 2.2)
+        phase = .idle(remaining: 1.65)
+        projectileCooldownRemaining = TimeInterval.random(in: 2...5)
     }
 
     func clearBoss() {
         cleanupAttackVisuals()
+        cleanupProjectiles()
         boss?.removeFromParent()
         boss = nil
-        phase = .idle(remaining: 2.35)
+        phase = .idle(remaining: 1.85)
     }
 
     func step(dt: TimeInterval, sceneSize: CGSize, playerPosition: CGPoint) {
         guard dt > 0, let boss, boss.hp > 0 else {
+            boss?.physicsBody?.velocity = .zero
             cleanupAttackVisuals()
+            cleanupProjectiles()
             return
         }
 
@@ -95,9 +103,78 @@ final class BossSystem {
         }
 
         let speed = boss.moveSpeed * moveFactor
-        boss.position.x += dir.dx * speed * CGFloat(dt)
-        boss.position.y += dir.dy * speed * CGFloat(dt)
+        boss.physicsBody?.velocity = CGVector(dx: dir.dx * speed, dy: dir.dy * speed)
+
+        // Projectile volleys run on their own timer (can overlap AOE).
+        projectileCooldownRemaining -= dt
+        if projectileCooldownRemaining <= 0 {
+            fireProjectileVolley(from: boss.position, toward: playerPosition)
+            projectileCooldownRemaining = TimeInterval.random(in: 2...5)
+        }
+
+        cullDistantProjectiles(near: playerPosition, sceneSize: sceneSize)
     }
+
+    // MARK: - Projectiles
+
+    private func fireProjectileVolley(from origin: CGPoint, toward target: CGPoint) {
+        let count = Int.random(in: 3...5)
+        var aim = CGVector(dx: target.x - origin.x, dy: target.y - origin.y)
+        let len = hypot(aim.dx, aim.dy)
+        guard len > 8 else { return }
+        aim = CGVector(dx: aim.dx / len, dy: aim.dy / len)
+
+        let baseAngle = atan2(aim.dy, aim.dx)
+        let fanSpread: CGFloat = 0.5
+
+        for i in 0..<count {
+            let t = count > 1 ? CGFloat(i) / CGFloat(count - 1) : 0.5
+            let jitter = CGFloat.random(in: -0.07...0.07)
+            let angle = baseAngle + (t - 0.5) * fanSpread * 2 + jitter
+            let shotDir = CGVector(dx: cos(angle), dy: sin(angle))
+            spawnProjectile(from: origin, direction: shotDir)
+        }
+    }
+
+    private func spawnProjectile(from origin: CGPoint, direction dir: CGVector) {
+        let spawnOffset: CGFloat = 52
+        let pos = CGPoint(
+            x: origin.x + dir.dx * spawnOffset,
+            y: origin.y + dir.dy * spawnOffset
+        )
+
+        let projectile = BossProjectileNode(
+            direction: dir,
+            speed: projectileSpeed,
+            damage: projectileDamage,
+            attackCategory: physics.bossAttack,
+            playerCategory: physics.player
+        )
+        projectile.position = pos
+        world.addChild(projectile)
+    }
+
+    private func cleanupProjectiles() {
+        for child in world.children where child.name == "boss_projectile" {
+            child.removeAllActions()
+            child.removeFromParent()
+        }
+    }
+
+    private func cullDistantProjectiles(near center: CGPoint, sceneSize: CGSize) {
+        let maxDist = max(sceneSize.width, sceneSize.height) * 1.35
+        let maxDistSq = maxDist * maxDist
+        for child in world.children where child.name == "boss_projectile" {
+            let dx = child.position.x - center.x
+            let dy = child.position.y - center.y
+            if (dx * dx + dy * dy) > maxDistSq {
+                child.removeAllActions()
+                child.removeFromParent()
+            }
+        }
+    }
+
+    // MARK: - AOE slam
 
     private func beginTelegraph(on boss: BossNode) {
         endTelegraph()
@@ -156,7 +233,7 @@ final class BossSystem {
         shape.run(
             .sequence([
                 .wait(forDuration: aoeStrikeDuration * 0.45),
-                .fadeAlpha(to: 0.08, duration: aoeStrikeDuration * 0.55)
+                .fadeAlpha(to: 0.08, duration: aoeStrikeDuration * 0.55),
             ])
         )
     }

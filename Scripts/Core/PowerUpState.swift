@@ -16,8 +16,8 @@ struct PowerUpState: Codable {
 struct InRunModifiers {
     var damageMultiplier: CGFloat = 1.0
     var dotDamagePerSecond: CGFloat = 0
-    var attackInterval: TimeInterval = 1.2
-    var attackRadius: CGFloat = 120
+    var attackInterval: TimeInterval = 0.92
+    var attackRadius: CGFloat = 159
     var moveSpeedMultiplier: CGFloat = 1.0
     var maxHPBonus: CGFloat = 0
     var damageReduction: CGFloat = 0 // 0..0.3

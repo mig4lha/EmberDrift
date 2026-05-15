@@ -7,15 +7,14 @@ enum PowerUpKind: String, Codable, CaseIterable {
     case eruption
     case widerReach
     case rapidCycle
+    case emberBolt
     case emberShell
-    case smoldering
-    case ashenHide
     case heatSink
     case rekindle
     case draft
     case magneticPull
+    case glowingCoals
     case kindlingBurst
     case ashTithe
     case overload
 }
-

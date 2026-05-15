@@ -15,6 +15,7 @@ final class XPSystem {
     private var xpOrbs: [XPOrbNode] = []
     private let baseOrbPullRadius: CGFloat = 90
     private var orbPullRadiusMultiplier: CGFloat = 1.0
+    private var xpEarnedMultiplier: Double = 1.0
 
     func snapshot() -> Snapshot {
         Snapshot(level: level, xp: xp, xpToNext: xpNeededForNextLevel(), pendingLevelUps: pendingLevelUps)
@@ -48,8 +49,14 @@ final class XPSystem {
         xpOrbs.removeAll(keepingCapacity: true)
     }
 
+    func setXpEarnedStacks(_ stacks: Int) {
+        let capped = max(0, min(3, stacks))
+        xpEarnedMultiplier = 1.0 + Double(capped) * 0.08
+    }
+
     func addXP(_ amount: Int) {
-        xp += max(0, amount)
+        let gained = Int((Double(max(0, amount)) * xpEarnedMultiplier).rounded())
+        xp += gained
         while xp >= xpNeededForNextLevel() {
             xp -= xpNeededForNextLevel()
             level += 1
