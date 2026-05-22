@@ -4,8 +4,10 @@ import UIKit
 final class HUDOverlay {
     enum NodeName {
         static let pause = "hud_pause"
-        static let debugInvincible = "debug_inv"
+        static let debugWin = "debug_win"
+        static let debugDie = "debug_die"
         static let debugLevelUp = "debug_lvl"
+        static let debugMaxBuild = "debug_max"
     }
 
     private let hpLabel = SKLabelNode(fontNamed: "AvenirNext-Bold")
@@ -17,9 +19,11 @@ final class HUDOverlay {
     private let bossBarBG = SKShapeNode(rectOf: CGSize(width: 220, height: 12), cornerRadius: 6)
     private let bossBarFill = SKShapeNode(rectOf: CGSize(width: 216, height: 8), cornerRadius: 4)
 
-    private let debugInvLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
-    private let debugLevelLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
     private let pauseLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let debugWinLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let debugDieLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let debugLevelUpLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
+    private let debugMaxBuildLabel = SKLabelNode(fontNamed: "AvenirNext-DemiBold")
 
     func attach(to cameraNode: SKNode) {
         hpLabel.fontSize = 18
@@ -48,7 +52,7 @@ final class HUDOverlay {
         timerLabel.zPosition = 10_000
         cameraNode.addChild(timerLabel)
 
-        bossLabel.text = "VOID COLOSSUS"
+        bossLabel.text = "ANDROID OVERLORD"
         bossLabel.fontSize = 14
         bossLabel.alpha = 0.9
         bossLabel.isHidden = true
@@ -68,24 +72,6 @@ final class HUDOverlay {
         bossBarFill.zPosition = 10_001
         cameraNode.addChild(bossBarFill)
 
-        debugInvLabel.text = "INV: OFF"
-        debugInvLabel.fontSize = 14
-        debugInvLabel.alpha = 0.85
-        debugInvLabel.name = NodeName.debugInvincible
-        debugInvLabel.horizontalAlignmentMode = .right
-        debugInvLabel.verticalAlignmentMode = .top
-        debugInvLabel.zPosition = 10_000
-        cameraNode.addChild(debugInvLabel)
-
-        debugLevelLabel.text = "+LVL"
-        debugLevelLabel.fontSize = 14
-        debugLevelLabel.alpha = 0.85
-        debugLevelLabel.name = NodeName.debugLevelUp
-        debugLevelLabel.horizontalAlignmentMode = .right
-        debugLevelLabel.verticalAlignmentMode = .top
-        debugLevelLabel.zPosition = 10_000
-        cameraNode.addChild(debugLevelLabel)
-
         pauseLabel.text = "PAUSE"
         pauseLabel.fontSize = 14
         pauseLabel.alpha = 0.9
@@ -94,6 +80,26 @@ final class HUDOverlay {
         pauseLabel.verticalAlignmentMode = .top
         pauseLabel.zPosition = 10_000
         cameraNode.addChild(pauseLabel)
+
+        #if DEBUG
+        for label in [debugWinLabel, debugDieLabel, debugLevelUpLabel, debugMaxBuildLabel] {
+            label.fontSize = 12
+            label.alpha = 0.85
+            label.fontColor = .white
+            label.horizontalAlignmentMode = .right
+            label.verticalAlignmentMode = .top
+            label.zPosition = 10_000
+            cameraNode.addChild(label)
+        }
+        debugWinLabel.text = "WIN"
+        debugWinLabel.name = NodeName.debugWin
+        debugDieLabel.text = "DIE"
+        debugDieLabel.name = NodeName.debugDie
+        debugLevelUpLabel.text = "+LVL"
+        debugLevelUpLabel.name = NodeName.debugLevelUp
+        debugMaxBuildLabel.text = "MAX"
+        debugMaxBuildLabel.name = NodeName.debugMaxBuild
+        #endif
     }
 
     func layout(sceneSize: CGSize, safeAreaInsets: UIEdgeInsets = .zero) {
@@ -115,13 +121,14 @@ final class HUDOverlay {
         bossBarBG.position = CGPoint(x: 0, y: topY - 24)
         bossBarFill.position = bossBarBG.position
 
-        debugInvLabel.position = CGPoint(x: halfW - marginRight, y: topY - 24)
-        debugLevelLabel.position = CGPoint(x: halfW - marginRight, y: topY - 48)
-        pauseLabel.position = CGPoint(x: halfW - marginRight, y: topY - 72)
-    }
+        pauseLabel.position = CGPoint(x: halfW - marginRight, y: topY - 24)
 
-    func setInvincible(_ on: Bool) {
-        debugInvLabel.text = on ? "INV: ON" : "INV: OFF"
+        #if DEBUG
+        debugWinLabel.position = CGPoint(x: halfW - marginRight, y: topY - 48)
+        debugDieLabel.position = CGPoint(x: halfW - marginRight, y: topY - 68)
+        debugLevelUpLabel.position = CGPoint(x: halfW - marginRight, y: topY - 88)
+        debugMaxBuildLabel.position = CGPoint(x: halfW - marginRight, y: topY - 108)
+        #endif
     }
 
     func update(

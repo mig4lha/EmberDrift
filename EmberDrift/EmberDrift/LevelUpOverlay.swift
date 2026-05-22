@@ -36,13 +36,13 @@ final class LevelUpOverlay: SKNode {
 
         let topNudge = safeAreaInsets.top
 
-        titleLabel.text = "LEVEL UP"
+        titleLabel.text = "SYSTEM UPDATE"
         titleLabel.fontSize = 28
         titleLabel.position = CGPoint(x: 0, y: sceneSize.height * 0.25 - topNudge)
         titleLabel.zPosition = 5001
         addChild(titleLabel)
 
-        hintLabel.text = "Hold a card for 0.5s to confirm"
+        hintLabel.text = "Hold an upgrade for 0.5s to deploy"
         hintLabel.fontSize = 14
         hintLabel.alpha = 0.75
         hintLabel.position = CGPoint(x: 0, y: -sceneSize.height * 0.32)

@@ -49,7 +49,7 @@ final class PauseOverlay: SKNode {
         menuLabel.zPosition = 6002
         addChild(menuLabel)
 
-        powerupsTitle.text = "Power-ups"
+        powerupsTitle.text = "Upgrades"
         powerupsTitle.fontSize = 16
         powerupsTitle.alpha = 0.9
         powerupsTitle.position = CGPoint(x: 0, y: menuLabel.position.y - 56)

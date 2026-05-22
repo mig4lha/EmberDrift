@@ -21,10 +21,6 @@ final class XPSystem {
         Snapshot(level: level, xp: xp, xpToNext: xpNeededForNextLevel(), pendingLevelUps: pendingLevelUps)
     }
 
-    func setLevelForDebug(_ newLevel: Int) {
-        level = max(1, newLevel)
-    }
-
     func addPendingLevelUps(_ count: Int) {
         pendingLevelUps += max(0, count)
     }

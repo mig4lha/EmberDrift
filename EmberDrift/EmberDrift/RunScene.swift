@@ -95,9 +95,8 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
     // Boss
     private var bossSystem: BossSystem!
 
-    // Run state + debug
+    // Run state
     private var isRunning: Bool = true
-    private var isInvincible: Bool = false
     private var bossKilled: Bool = false
     private var isPausedByPlayer: Bool = false
     private let pauseOverlay = PauseOverlay()
@@ -239,17 +238,25 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
             return
         }
 
-        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugInvincible }) {
-            isInvincible.toggle()
-            hud.setInvincible(isInvincible)
+        #if DEBUG
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugWin }) {
+            debugInstantWin()
+            return
+        }
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugDie }) {
+            debugInstantLose()
             return
         }
         if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugLevelUp }) {
-            xpSystem.setLevelForDebug(xpSystem.snapshot().level + 1)
-            xpSystem.addPendingLevelUps(1)
-            updateHUD()
+            debugLevelUp()
             return
         }
+        if camHits.contains(where: { $0.name == HUDOverlay.NodeName.debugMaxBuild }) {
+            debugGrantAllUpgrades()
+            return
+        }
+        #endif
+
         if isLevelUpPresented {
             let loc = touch.location(in: levelUpOverlay)
             if levelUpOverlay.beginHold(at: loc) {
@@ -473,6 +480,40 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         endRun()
     }
 
+    #if DEBUG
+    private func debugInstantWin() {
+        guard isRunning else { return }
+        bossKilled = true
+        endRun()
+    }
+
+    private func debugInstantLose() {
+        guard isRunning else { return }
+        hp = 0
+        endRun()
+    }
+
+    private func debugLevelUp() {
+        guard isRunning, !isPausedByPlayer else { return }
+        xpSystem.addPendingLevelUps(1)
+        if !isLevelUpPresented {
+            presentLevelUp()
+        }
+        updateHUD()
+    }
+
+    private func debugGrantAllUpgrades() {
+        guard isRunning, !isPausedByPlayer else { return }
+        for kind in PowerUpKind.allCases where kind != .kindlingBurst {
+            let target = kind.maxStacks ?? 1
+            while powerUpStacks[kind, default: 0] < target {
+                apply(kind)
+            }
+        }
+        updateHUD()
+    }
+    #endif
+
     private func recycleTilesAroundPlayer() {
         rebuildGroundTilesIfNeeded()
         guard !tiles.isEmpty, tileGridRadius >= 0 else { return }
@@ -502,7 +543,6 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         let b = contact.bodyB.categoryBitMask
 
         if (a == Physics.player && b == Physics.enemy) || (a == Physics.enemy && b == Physics.player) {
-            guard !isInvincible else { return }
             let now = lastUpdateTime ?? 0
             let cooldown: TimeInterval = 0.35
             guard now - lastDamageTime >= cooldown else { return }
@@ -531,7 +571,6 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         }
 
         if (a == Physics.player && b == Physics.boss) || (a == Physics.boss && b == Physics.player) {
-            guard !isInvincible else { return }
             let now = lastUpdateTime ?? 0
             let cooldown: TimeInterval = 0.5
             guard now - lastDamageTime >= cooldown else { return }
@@ -548,7 +587,6 @@ final class RunScene: SKScene, SKPhysicsContactDelegate {
         }
 
         if (a == Physics.player && b == Physics.bossAttack) || (a == Physics.bossAttack && b == Physics.player) {
-            guard !isInvincible else { return }
             let now = lastUpdateTime ?? 0
             let cooldown: TimeInterval = 0.15
             guard now - lastDamageTime >= cooldown else { return }
